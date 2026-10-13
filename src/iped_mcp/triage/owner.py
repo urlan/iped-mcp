@@ -36,7 +36,6 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from fastmcp import FastMCP
 
 from iped_mcp import progress
 from iped_mcp.progress import op_envelope
@@ -1124,53 +1123,3 @@ def build_owner_candidates(source_id: str) -> dict[str, Any]:
             )
         )
     return _payload(sid, started, envelopes, outcome, warnings)
-
-
-def owner_candidates(source_id: str) -> dict[str, Any]:
-    """Candidatos a proprietário do dispositivo: motor heurístico (T-9).
-
-    Roda o motor do ``owner_inference_engine.py`` do ICARO SEM LLM sobre as
-    entidades dos 4 eixos já computados na mesma chamada (identidade,
-    financeiro, mídia, comunicação — import direto dos módulos internos;
-    nenhuma query nova além das dos eixos-membro). Devolve até 5 candidatos
-    ranqueados com score (pesos/caps literais por feed: conta principal 70,
-    path 60, contato-com-próprio-número 55, cartão 20, pagador 18,
-    e-mail/favorecido 15, Wi-Fi pessoal 12, recebedor 12, mídia 10, telefonia
-    8, interlocutor 5, SIM 5), confiança ALTA/MÉDIA/BAIXA (bordas 60/35),
-    fontes, evidência textual, fusão de variações por chave compacta
-    ("Titular Teste" ≡ "TitularTeste"), vetos (ponto, técnico, institucional, ID
-    de transação, termo não-pessoa) e a penalidade ×0.3 para vencedor vindo
-    só de fontes financeiras com score acima de 100. O custo é a união dos
-    ``http_calls`` dos membros (teto composto ``OWNER_BUDGET``; estouro vira
-    ``truncated`` + warning com phase "partial", nunca exceção); eixo-membro
-    que falha sai com ``per_axis_available=false`` + warning sem derrubar a
-    ferramenta; sem candidato, ``message`` explícita com lista vazia.
-
-    Args:
-        source_id: source a triar (veja iped_list_sources).
-
-    Returns:
-        {source_id, candidates[:5] (name, score, confidence, sources[:3],
-        evidence), total_candidates, financial_only_penalty_applied
-        {applied, name}, per_axis_available{identity, financial, media,
-        communication}, counters (op_envelope + member_http_calls +
-        http_calls + http_budget), truncated (composto + por membro + teto
-        de candidatos), warnings}; ``message`` quando vazio.
-
-    Raises:
-        ValueError: source_id vazio, inexistente ou servidor indisponível
-            (textos estáveis da política M-2).
-    """
-    return build_owner_candidates(source_id)
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool owner_candidates (T-9) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(owner_candidates)

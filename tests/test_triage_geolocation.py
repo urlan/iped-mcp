@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 from iped_mcp import progress
-from iped_mcp.triage import geolocation, knowledge
+from iped_mcp.triage import geolocation, knowledge, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 GPS_PROBE = 'category:"locations"'
@@ -78,7 +78,7 @@ def test_fluxo_feliz_exif_com_chaves_dinamicas(
     """Doc EXIF com GPSLatitude/GPSLongitude: ponto com tipo, período e campos."""
     _add_geo_doc(webapi, 10, _gps("-22.90000", "-43.17200", "2024-03-01T10:00:00"))
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS
     point = out["points"][0]
@@ -115,7 +115,7 @@ def test_score_e_relevance_estritos_do_handler(
     """min(50+5n,95) e limiares ESTREITOS: count 10 é MÉDIA, 11 é ALTA."""
     _cluster(webapi, 20, count, "-22.9", "-43.2")
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     point = out["points"][0]
     assert (point["evidence_count"], point["score"], point["relevance"]) == (
@@ -134,7 +134,7 @@ def test_null_island_descartada_e_vizinha_nao(
     _add_geo_doc(webapi, 41, _gps("0.00005", "0.00005"))
     _add_geo_doc(webapi, 42, _gps("0.0002", "0.0002"))
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert out["locations_count"] == 1
     point = out["points"][0]
@@ -150,7 +150,7 @@ def test_coordenada_fora_de_bounds_descartada(
     """lat 95 não existe: doc some e o eixo fica vazio com message explícita."""
     _add_geo_doc(webapi, 50, _gps("95.0", "10.0"))
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert out["points"] == []
     assert out["locations_count"] == 0
@@ -167,7 +167,7 @@ def test_cluster_11m_periodo_e_unicas(webapi: Any, fake_router: Any) -> None:
     _add_geo_doc(webapi, 61, _gps("-22.90001", "-43.17200", "2023-01-01"))
     _add_geo_doc(webapi, 62, _gps("-22.90004", "-43.17200", "2024-01-01"))
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     point = out["points"][0]
     assert (point["latitude"], point["longitude"]) == (-22.9, -43.172)
@@ -180,7 +180,7 @@ def test_timestamp_ausente_vira_NI(webapi: Any, fake_router: Any) -> None:
     """Sem timestamp: período N/I dos dois lados (:147/:149)."""
     _add_geo_doc(webapi, 70, _gps("-22.9", "-43.2"))
 
-    point = geolocation.triage_geolocation(SOURCE_ID)["points"][0]
+    point = tool.triage_geolocation(SOURCE_ID)["points"][0]
 
     assert (point["first_seen"], point["last_seen"]) == ("N/I", "N/I")
 
@@ -195,7 +195,7 @@ def test_fallback_geo_locations_tipo_metadata(webapi: Any, fake_router: Any) -> 
         category="documents",
     )
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     point = out["points"][0]
     assert point["source_types"] == ["GEO_METADATA"]
@@ -209,7 +209,7 @@ def test_categoria_mapeada_chat_e_a_crua_senao(webapi: Any, fake_router: Any) ->
     _add_geo_doc(webapi, 86, _gps("-10.2", "-50.2"), category="relatorio-x")
 
     types = sorted(
-        t for p in geolocation.triage_geolocation(SOURCE_ID)["points"]
+        t for p in tool.triage_geolocation(SOURCE_ID)["points"]
         for t in p["source_types"]
     )
 
@@ -227,7 +227,7 @@ def test_probe_zero_hit_e_falha_agem_com_warning_nominal(
     webapi.fail_search_queries.add(GPS_PROBE)
     _add_geo_doc(webapi, 90, _gps("-22.9", "-43.2"), probe="gps")
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert out["query_hits"][GPS_PROBE] == -1
     assert any(f"probe {GPS_PROBE} falhou" in w for w in out["warnings"])
@@ -246,7 +246,7 @@ def test_shape_nao_contem_pais_estado_cidade(
     """Ausente ≠ falso: country/state/city NUNCA aparecem no shape."""
     _add_geo_doc(webapi, 95, _gps("-22.9", "-43.2"))
 
-    point = geolocation.triage_geolocation(SOURCE_ID)["points"][0]
+    point = tool.triage_geolocation(SOURCE_ID)["points"][0]
 
     assert all(key not in point for key in ("country", "state", "city"))
 
@@ -261,7 +261,7 @@ def test_teto_de_100_pontos_marcado_com_omissao(
     for i in range(knowledge.GEO_POINTS_TOP + 2):
         _add_geo_doc(webapi, 200 + i, _gps(f"-20.{i:04d}", f"-40.{i:04d}"))
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert len(out["points"]) == knowledge.GEO_POINTS_TOP
     assert out["locations_count"] == 102
@@ -275,14 +275,14 @@ def test_teto_de_100_pontos_marcado_com_omissao(
 def test_source_inexistente_vira_value_error_estavel(fake_router: Any) -> None:
     """404 de source: ValueError estável ANTES de qualquer HTTP (M-2)."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        geolocation.triage_geolocation(UNKNOWN_SOURCE)
+        tool.triage_geolocation(UNKNOWN_SOURCE)
 
 
 def test_eixo_vazio_e_mensagem_explicita_sem_excecao(
     webapi: Any, fake_router: Any
 ) -> None:
     """Nada geo: message explícita + as 6 probes pagas; sem exceção (§0.1)."""
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS | {"message"}
     assert out["message"] == knowledge.GEO_EMPTY_MESSAGE
@@ -296,7 +296,7 @@ def test_orcamento_estourado_vira_parcial_marcado(
     monkeypatch.setitem(knowledge.TOOL_BUDGETS, "triage_geolocation", 7)
     _cluster(webapi, 300, 2, "-22.9", "-43.2")
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     counters, truncated = out["counters"], out["truncated"]
     assert (counters["phase"], counters["http_calls"]) == (
@@ -315,7 +315,7 @@ def test_http_calls_exato_e_igual_ao_trafego_do_fake(
     _cluster(webapi, 320, 2, "-22.9", "-43.2")
     webapi.requests_log.clear()
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     paths = [entry["path"] for entry in webapi.requests_log]
     searches = paths.count("/search")

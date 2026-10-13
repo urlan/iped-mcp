@@ -23,8 +23,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from iped_mcp.fetch import search_ids
 from iped_mcp.regex.queries import build_regex_query
@@ -870,47 +868,3 @@ def build_triage_financial(source_id: str) -> dict[str, Any]:
         sid, started, evidences, cards, accounts,
         regex_availability, scan, budget, omitted,
     )
-
-
-def triage_financial(source_id: str) -> dict[str, Any]:
-    """Triagem financeira do eixo "Financeiro" do ICARO (T-4).
-
-    Args:
-        source_id: id do source no servidor WebAPI do caso.
-
-    Returns:
-        Envelope ``{source_id, evidences[:30] + evidence_count, cards,
-        accounts[:30] + account_count, regex_availability, query_hits,
-        counters, truncated, warnings[, message]}`` — evidências por
-        detector Regex (escada MONEY > Boleto > Conta, valor BR parseado,
-        ordenadas por valor desc, score 75/55, PIX→ALTA), cartões com
-        transações/locais agregados por ``ufed:jumpTargets`` (score
-        ``min(60+2×tx, 95)``, ≥85 ALTA; transações truncadas em 5 com
-        omissão marcada) e contas/ativos financeiros (score fixo 90 com
-        moedas/ativos agregados e conta de nuvem pelo e-mail do path).
-        ``regex_availability`` informa o painel de sondas por caso (o
-        detector ausente vira warning, nunca exceção — M-7).
-
-    Raises:
-        ToolError: source inexistente/servidor offline (M-2) ou erro
-            inesperado traduzido; estouro de orçamento NUNCA raising — vira
-            ``truncated.http_budget_exceeded`` + warning.
-    """
-    try:
-        return build_triage_financial(source_id)
-    except ValueError:
-        raise
-    except Exception as exc:  # traduz erro inesperado (padrão da família)
-        raise ToolError(f"triage_financial falhou: {exc}") from exc
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem financeira (triage_financial) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_financial)

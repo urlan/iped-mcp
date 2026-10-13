@@ -16,7 +16,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastmcp import FastMCP
 
 from iped_mcp import fetch
 from iped_mcp.progress import PHASE_PARTIAL, op_envelope
@@ -510,55 +509,3 @@ def build_triage_telephony(source_id: str) -> dict[str, Any]:
     scan.docs_fetched = sum(1 for _, props in pairs if props is not None)
     rows = _rank_contacts(_aggregate(pairs, scan))
     return _payload(sid, started, rows, scan, budget, omitted)
-
-
-def triage_telephony(source_id: str) -> dict[str, Any]:
-    """Triagem do eixo telefonia: top contatos por peso de chamadas.
-
-    Varre as categorias canônicas de telefonia (``chamadas telefônicas``,
-    ``calls``, ``call logs``, ``contatos``, ``contacts``), agrega chamadas
-    e contatos de agenda por número e devolve os 20 mais relevantes com
-    score ``min(50 + total_calls, 90)`` e relevância ``ALTA`` (>30
-    chamadas), ``MÉDIA`` (>10) ou ``BAIXA`` — heurística do fluxo ICARO,
-    sem LLM. A resposta traz somente registros compactos + contadores:
-    nenhum id de documento fora de ``sample_doc_ids`` (até 3 por contato)
-    e nenhuma propriedade bruta. Contatos de agenda sem chamadas vêm com
-    ``total_calls=0``/``score=50``/``BAIXA``.
-
-    O nome de agenda usa a whitelist ordenada T-1.1 (``ufed:Name`` ->
-    ``ufed:name`` -> ``userName`` -> ``ufed:userName``; primeiro campo com
-    valor vence). Divergência INTENCIONAL do ICARO-telephony (que lê só
-    ``ufed:Name``, telephony_strategy.py:117-118, e cobriria 0 nomes neste
-    build — veredito R1): a whitelist alinha o eixo à lista do
-    ICARO-identity (identity_strategy.py:358-362). O histograma
-    ``contact_name_field_hits`` no envelope diz qual campo produziu cada
-    nome, e um aviso ``nome_da_agenda_origem=<campo>`` marca a origem
-    quando o campo clássico fica em zero.
-
-    Args:
-        source_id: source a triar (veja iped_list_sources).
-
-    Returns:
-        {source_id, contacts: [{phone, contact_name, total_calls,
-        calls_out, calls_in, calls_missed, total_duration_seconds, score,
-        relevance, justification, sample_doc_ids}], query_hits (por query;
-        -1 = query que falhou), counters (phase/scanned/processed/
-        elapsed_s/docs_searched/docs_fetched/call_docs/contact_docs/
-        contact_name_field_hits/contacts_total/cached), truncated (tetos
-        SEMPRE marcados), warnings}; ``message`` quando o eixo está vazio
-        (contacts=[], nunca exceção).
-
-    Raises:
-        ValueError: source_id vazio, inexistente ou servidor indisponível
-            (textos estáveis da política M-2).
-    """
-    return build_triage_telephony(source_id)
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem de telefonia (T-1) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-    """
-    mcp.add_tool(triage_telephony)

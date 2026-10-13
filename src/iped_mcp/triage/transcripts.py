@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from fastmcp import FastMCP
 
 from iped_mcp import download, fetch
 from iped_mcp.progress import PHASE_PARTIAL, op_envelope
@@ -394,46 +393,3 @@ def build_transcripts(
         preview=preview,
         preview_truncated=truncated,
     )
-
-
-def transcripts_generate(
-    source_id: str, dest_dir: str | None = None
-) -> dict[str, Any]:
-    """Gera o arquivo de transcrições de áudio embutidas no índice.
-
-    Varre as queries canônicas de áudio (categoria ``Audios``/``Áudios`` e
-    o fallback por extensão), mantém os docs com o metadado ASR embutido
-    ``audio:transcription``, deduplica por hash e ordena no tempo (com
-    data antes dos sem data). Grava o artefato ``Transcricoes.txt`` no
-    disco de exports (nome UTC/source, no-clobber — o MCP não toca o caso)
-    e devolve SOMENTE metadados + preview: o texto completo nunca vai na
-    resposta. Caso sem áudios (ou sem nenhuma transcrição) é o contrato
-    zero explícito: nada é gravado e ``message`` nomeia o metadado —
-    nunca exceção.
-
-    Args:
-        source_id: source a varrer (veja iped_list_sources).
-        dest_dir: pasta de destino do artefato (None = pasta de exports do
-            servidor, ``IPED_MCP_EXPORTS_DIR``).
-
-    Returns:
-        {source_id, file_path, audio_docs, with_transcript,
-        without_transcript, duplicates, file_bytes, preview,
-        preview_truncated, counters, truncated, warnings}; ``message``
-        quando não há transcrição alguma (``file_path=None``, contadores
-        zerados).
-
-    Raises:
-        ValueError: source_id vazio, inexistente ou servidor indisponível
-            (textos estáveis da política M-2).
-    """
-    return build_transcripts(source_id, dest_dir)
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de transcrições (T-2) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-    """
-    mcp.add_tool(transcripts_generate)

@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 from iped_mcp import download
-from iped_mcp.triage import knowledge, transcripts
+from iped_mcp.triage import knowledge, tool, transcripts
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 ENVELOPE_KEYS = {
@@ -98,7 +98,7 @@ def test_fluxo_feliz_formato_ordem_dedup(
                "fala dois", created="1767225600000")  # epoch ms: 2026-01-01
     _add_audio(webapi, 905, "terceiro.amr", "E:z>>t.amr", "EEEE", "fala tres")
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     assert set(out) == ENVELOPE_KEYS
     assert "message" not in out
@@ -138,7 +138,7 @@ def test_sem_audios_contrato_zero_sem_arquivo(
     webapi: Any, fake_router: Any, tmp_path: Path
 ) -> None:
     """Nenhum hit nas 3 queries: file_path=None, contadores 0, message."""
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     assert set(out) == ENVELOPE_KEYS | {"message"}
     assert out["file_path"] is None
@@ -155,7 +155,7 @@ def test_audios_sem_transcricao_contrato_zero(
     """Áudios existem mas nenhum com ASR: mesmo contrato zero nomeado."""
     _add_audio(webapi, 910, "mudo.opus", "E:m>>m.opus", "FFFF", None)
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     assert out["file_path"] is None
     assert out["audio_docs"] == 1 and out["without_transcript"] == 1
@@ -174,7 +174,7 @@ def test_preview_cap_exato_e_marcado(
     monkeypatch.setattr(knowledge, "PREVIEW_CHARS", 50)
     _add_audio(webapi, 920, "longo.wav", "E:l>>l.wav", "LLLL", "x" * 300)
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     assert len(out["preview"]) == 50
     assert out["preview"].endswith(knowledge.PREVIEW_ELLIPSIS)
@@ -195,9 +195,9 @@ def test_colisao_de_nome_gera_sufixo_e_preserva_o_primeiro(
     )
     _add_audio(webapi, 930, "a.wav", "E:a>>a.wav", "H1", "primeira")
 
-    first = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    first = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
     _add_audio(webapi, 931, "b.wav", "E:a>>b.wav", "H2", "segunda tambem")
-    second = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    second = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     base = "20261011T123456Z_" + SOURCE_ID + "_Transcricoes"
     assert os.path.basename(first["file_path"]) == base + ".txt"
@@ -219,7 +219,7 @@ def test_guarda_de_varredura_marcada(
         _add_audio(webapi, 940 + i, f"a{i}.wav", f"E:g>>a{i}.wav",
                    f"K{i}", f"fala {i}")
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     assert out["truncated"]["scan_cap_applied"] is True
     assert out["audio_docs"] == 2
@@ -235,13 +235,13 @@ def test_fallback_so_para_quando_query_anterior_nao_produziu(
     _add_audio(webapi, 950, "so-ext.opus", "E:f>>so.opus", "FX", "via ext",
                category="OutraCoisa", ext="opus")
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     assert out["with_transcript"] == 1
     assert _search_count(webapi) == AUDIO_QUERIES_LOGGED  # 2 vazias + a que casou
 
     _add_audio(webapi, 951, "cat.wav", "E:f>>cat.wav", "FY", "via category")
-    out2 = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out2 = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
     assert out2["with_transcript"] == 1
     assert _search_count(webapi) == AUDIO_QUERIES_LOGGED + 1  # para na 1ª
 
@@ -252,4 +252,4 @@ def test_fallback_so_para_quando_query_anterior_nao_produziu(
 def test_source_inexistente_vira_value_error_estavel(fake_router: Any) -> None:
     """ValueError com o texto estável do Router.resolve, antes do HTTP."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        transcripts.transcripts_generate(UNKNOWN_SOURCE)
+        tool.transcripts_generate(UNKNOWN_SOURCE)

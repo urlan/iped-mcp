@@ -3,14 +3,11 @@ import sys
 
 from fastmcp import FastMCP
 
-from iped_mcp import config
+from iped_mcp import config, triage
 from iped_mcp.bookmarks import register as register_bookmarks
 from iped_mcp.core import register as register_core
 from iped_mcp.regex import register as register_regex
 from iped_mcp.router import RouterStartupError, get_router
-from iped_mcp.triage import register as register_triage
-from iped_mcp.triage.owner import register as register_owner
-from iped_mcp.triage.discovery import register as register_discovery
 from iped_mcp.ufed import register as register_ufed
 from iped_mcp.whatsapp import register as register_whatsapp
 
@@ -57,9 +54,7 @@ register_ufed(mcp)
 register_regex(mcp)
 register_bookmarks(mcp)
 register_whatsapp(mcp)
-register_triage(mcp)
-register_owner(mcp)
-register_discovery(mcp)
+triage.register(mcp)
 
 
 def main() -> None:
