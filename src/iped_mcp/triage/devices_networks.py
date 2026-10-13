@@ -26,8 +26,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from iped_mcp.fetch import search_ids
 from iped_mcp.progress import PHASE_PARTIAL, op_envelope
@@ -580,45 +578,3 @@ def _payload(
         "warnings": scan.warnings,
         **({"message": knowledge.DN_EMPTY_MESSAGE} if empty else {}),
     }
-
-
-def triage_devices_networks(source_id: str) -> dict[str, Any]:
-    """Triagem de dispositivos/redes do ICARO (T-7): só agregados.
-
-    Args:
-        source_id: id do source no servidor WebAPI do caso.
-
-    Returns:
-        Envelope ``{source_id, connections_by_ip[:50] (IPv6 colapsado por
-        /64, por hits), services_summary[] (rótulos iCloud),
-        device_fingerprints[] (dedup model/hw/build, apps_observed),
-        wifi_networks[:100], bluetooth_devices[:100], connections_total,
-        logs_parsed/logs_total, query_hits, counters, truncated,
-        warnings[, message]}`` — a timeline bruta de conexões do ICARO
-        (normalizer :35) NUNCA é publicada; o conceito de truncamento é
-        portado sobre a visão agregada. Parse fiel de ``ufed:Body``
-        (``Service=… IP=…``) e dos 3 formatos de ``ufed:Application``.
-
-    Raises:
-        ToolError: source inexistente/servidor offline (M-2) ou erro
-            inesperado traduzido; estouro de orçamento NUNCA raising — vira
-            ``truncated.http_budget_exceeded`` + warning.
-    """
-    try:
-        return build_triage_devices_networks(source_id)
-    except ValueError:
-        raise
-    except Exception as exc:  # traduz erro inesperado (padrão da família)
-        raise ToolError(f"triage_devices_networks falhou: {exc}") from exc
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem de dispositivos/redes no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_devices_networks)

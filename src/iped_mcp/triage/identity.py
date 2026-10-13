@@ -23,7 +23,6 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from typing import Any
 
-from fastmcp import FastMCP
 
 from iped_mcp import fetch, progress
 from iped_mcp.progress import op_envelope
@@ -1262,57 +1261,3 @@ def _apply_name_fallback(agg: _IdentityAgg, scan: _Scan) -> None:
     if agg.name or not scan.name_candidates:
         return
     agg.name = scan.name_candidates[0]
-
-
-def triage_identity(source_id: str) -> dict[str, Any]:
-    """Triagem do eixo identidade: entidade principal + reconhecidos + agenda.
-
-    Varre as 19 categorias canônicas de identidade, replica a classificação
-    do eixo ICARO (categoria OU fonte válida; reconhecidos por dupla guarda
-    categoria/contentType) e devolve a identidade principal normalizada
-    (nome, confiança, e-mails, telefones com os 5 filtros do Regex:PHONE,
-    SIM/Wi-Fi/Bluetooth, agenda, device_info padronizado em 16 chaves) com
-    score 90/70/50 por confiança e relevância >=85/>=60 — heurística do
-    fluxo ICARO, sem LLM. Dispositivos reconhecidos pela conta de nuvem são
-    entidades próprias (não alimentam a identidade) com teto 50 sempre
-    marcado. A resposta nunca traz propriedades brutas nem listas de ids.
-
-    Cada chamada emite no máximo ``TOOL_BUDGETS["triage_identity"]`` GETs
-    internos; o envelope reporta ``http_calls`` (tráfego real) e estouro vira
-    ``truncated.http_budget_exceeded`` + warning, nunca exceção. A pré-sonda
-    de campos de nome (``counters.name_field_hits``) elimina o 0-silencioso:
-    cobertura zero com docs varridos emite aviso nomeando os literais.
-
-    Args:
-        source_id: source a triar (veja iped_list_sources).
-
-    Returns:
-        {source_id, identity? (nome, confidence, score, relevance,
-        justification, emails, phone_numbers, mentioned_phone_numbers,
-        aliases, usernames, sim_msisdn, wifi_networks, bluetooth_devices,
-        known_contacts_count, known_contacts_sample[:20], device_info{16},
-        evidence_source_type, photo_id, source_name, doc_id, path),
-        recognized_devices ([:50], rótulos PT), recognized_devices_count,
-        query_hits (-1 = query que falhou), counters (op_envelope +
-        docs_searched/docs_fetched/classified_docs/recognized_total/
-        name_field_hits/http_calls/cached), truncated (tetos SEMPRE
-        marcados), warnings}; ``message`` quando o eixo está vazio (nunca
-        exceção).
-
-    Raises:
-        ValueError: source_id vazio, inexistente ou servidor indisponível
-            (textos estáveis da política M-2).
-    """
-    return build_triage_identity(source_id)
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem de identidade (T-3) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_identity)

@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-from iped_mcp import progress
-from iped_mcp.triage import knowledge, owner
+from iped_mcp import progress, triage
+from iped_mcp.triage import knowledge, owner, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 ENVELOPE_KEYS = {
@@ -472,7 +472,7 @@ def test_envelope_e_candidatos_do_caso_semeado(
     """Identidade forte (70, ALTA) + fusão alias/path (60, ALTA), shape §9.6."""
     _seed_owner_case(webapi)
 
-    out = owner.owner_candidates(SOURCE_ID)
+    out = tool.owner_candidates(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS
     assert out["per_axis_available"] == {
@@ -510,7 +510,7 @@ def test_http_calls_composto_soma_dos_membros(
     _member_targets_and_counts(webapi)  # esquenta cache e serve de pino
 
     webapi.requests_log.clear()
-    out = owner.owner_candidates(SOURCE_ID)
+    out = tool.owner_candidates(SOURCE_ID)
 
     member = out["counters"]["member_http_calls"]
     assert set(member) == {"identity", "financial", "media", "communication"}
@@ -531,7 +531,7 @@ def test_nenhuma_query_nova_alem_dos_eixos_membros(
     member_targets, member_counts = _member_targets_and_counts(webapi)
 
     webapi.requests_log.clear()
-    out = owner.owner_candidates(SOURCE_ID)
+    out = tool.owner_candidates(SOURCE_ID)
 
     owner_targets = {e["raw_target"] for e in webapi.requests_log}
     assert owner_targets <= member_targets
@@ -549,7 +549,7 @@ def test_eixo_que_falha_nao_derruba_a_ferramenta(
         raise RuntimeError("eixo artificialmente quebrado")
 
     monkeypatch.setattr(owner, "build_triage_communication", _boom)
-    out = owner.owner_candidates(SOURCE_ID)
+    out = tool.owner_candidates(SOURCE_ID)
 
     assert out["per_axis_available"]["communication"] is False
     assert out["per_axis_available"]["identity"] is True
@@ -567,7 +567,7 @@ def test_orcamento_estourado_vira_parcial_marcado(
     _seed_owner_case(webapi)
     monkeypatch.setattr(knowledge, "OWNER_BUDGET", 5)
 
-    out = owner.owner_candidates(SOURCE_ID)
+    out = tool.owner_candidates(SOURCE_ID)
 
     assert out["truncated"]["http_budget_exceeded"] is True
     assert out["truncated"]["http_budget_calls_at_stop"] == (
@@ -582,7 +582,7 @@ def test_orcamento_estourado_vira_parcial_marcado(
 def test_source_inexistente_vira_value_error_estavel(fake_router: Any) -> None:
     """404 de source: ValueError estável ANTES de qualquer HTTP (M-2)."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        owner.owner_candidates(UNKNOWN_SOURCE)
+        tool.owner_candidates(UNKNOWN_SOURCE)
 
 
 def test_vazio_explicito_sem_candidatos_sem_excecao(
@@ -591,7 +591,7 @@ def test_vazio_explicito_sem_candidatos_sem_excecao(
     """Nada nos eixos: candidates [], message explícita, sem exceção (§0.1)."""
     webapi.docs.clear()
 
-    out = owner.owner_candidates(SOURCE_ID)
+    out = tool.owner_candidates(SOURCE_ID)
 
     assert out["candidates"] == []
     assert out["total_candidates"] == 0
@@ -604,7 +604,7 @@ def test_tool_registrada_via_mcp(fake_router: Any, webapi: Any) -> None:
     from fastmcp import Client, FastMCP
 
     server = FastMCP("iped_mcp_test")
-    owner.register(server)
+    triage.register(server)
 
     async def _run() -> dict[str, Any]:
         async with Client(server) as client:

@@ -40,8 +40,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from iped_mcp.fetch import search_ids
 from iped_mcp.progress import PHASE_PARTIAL, op_envelope
@@ -625,48 +623,3 @@ def _rank_documents(
         items.append(item)
     items.sort(key=lambda item: -item["score"])
     return items
-
-
-def triage_media(source_id: str) -> dict[str, Any]:
-    """Triagem de mídia do ICARO (T-6): itens ranqueados por sinais.
-
-    Args:
-        source_id: id do source no servidor WebAPI do caso.
-
-    Returns:
-        Envelope ``{source_id, ranked_items[:50] + items_total,
-        by_category, apps, owner_media_signals[:20], query_hits, counters
-        (+field_hits), truncated, warnings[, message]}`` — cada item com
-        ``score`` (base 50 mídia / 40 chat + soma dos 12 sinais
-        OCR/rosto/nudez/transcrito/CPF/telefone/URL/GPS/ext-divergente/
-        carved/deletado/download-financeiro), ``relevance`` por score
-        (ALTA >= 85, MÉDIA >= 60, BAIXA), ``signals`` e justificativa
-        literal do ICARO. Contagem por categoria crua, apps (marcador
-        ``com.whatsapp`` no path + ``ufed:ServiceIdentifier``) e
-        contas/titulares vistos em mídia com "N/I" ignorado. O histograma
-        ``counters.field_hits`` publica NOMES de campos (teto 40) com a poda
-        ``MEDIA_DROP`` do ICARO — valores jamais.
-
-    Raises:
-        ToolError: source inexistente/servidor offline (M-2) ou erro
-            inesperado traduzido; estouro de orçamento NUNCA raising — vira
-            ``truncated.http_budget_exceeded`` + warning.
-    """
-    try:
-        return build_triage_media(source_id)
-    except ValueError:
-        raise
-    except Exception as exc:  # traduz erro inesperado (padrão da família)
-        raise ToolError(f"triage_media falhou: {exc}") from exc
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem de mídia (triage_media) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_media)

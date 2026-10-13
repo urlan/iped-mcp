@@ -27,8 +27,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from iped_mcp.fetch import search_ids
 from iped_mcp.progress import PHASE_PARTIAL, op_envelope
@@ -474,48 +472,3 @@ def build_triage_geolocation(source_id: str) -> dict[str, Any]:
         budget,
         omitted,
     )
-
-
-def triage_geolocation(source_id: str) -> dict[str, Any]:
-    """Triagem de geolocalização do ICARO (T-5).
-
-    Args:
-        source_id: id do source no servidor WebAPI do caso.
-
-    Returns:
-        Envelope ``{source_id, points[:100] + locations_count,
-        coordinates_by_source, query_hits, counters, truncated, warnings[,
-        message]}`` — clusters de coordenadas (~11 m, 4 decimais) com
-        ``evidence_count`` (docs que contribuíram),
-        ``unique_coordinate_count`` (cruas únicas — poluição por
-        duplicação), ``source_types`` (EXIF/CHAT/WIFI/CELL_TOWER/
-        GEO_METADATA por categoria :165-174), período lexicográfico e score
-        ``min(50+5×evidências, 95)`` com relevância ESTREITA (>10 ALTA, >3
-        MÉDIA). Bounds ±90/±180 e Null Island (|lat|,|lon| ≤ 1e-4) são
-        descartados. SEM país: ``CoordinatesToCountryTool`` é
-        ICARO-side/externa (§5.3) — os campos country/state/city não
-        existem no shape (ausente ≠ falso).
-
-    Raises:
-        ToolError: source inexistente/servidor offline (M-2) ou erro
-            inesperado traduzido; estouro de orçamento NUNCA raising — vira
-            ``truncated.http_budget_exceeded`` + warning.
-    """
-    try:
-        return build_triage_geolocation(source_id)
-    except ValueError:
-        raise
-    except Exception as exc:  # traduz erro inesperado (padrão da família)
-        raise ToolError(f"triage_geolocation falhou: {exc}") from exc
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem de geolocalização (triage_geolocation) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_geolocation)

@@ -19,7 +19,8 @@ import pytest
 
 from iped_mcp import progress
 from iped_mcp.triage import (
-    budget, financial, geolocation, identity, knowledge, telephony, transcripts,
+    budget, financial, geolocation, identity, knowledge, telephony, tool,
+    transcripts,
 )
 from tests.conftest import SOURCE_ID, make_doc
 import tests.test_triage_financial as tf
@@ -141,7 +142,7 @@ def test_t1_http_calls_igual_ao_trafego_do_fake(
     t1._add_agenda_contact(webapi, 812, "Fulano", "(55 11 99999-0000)")
     webapi.requests_log.clear()
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     paths = [entry["path"] for entry in webapi.requests_log]
     searches = paths.count("/search")
@@ -160,7 +161,7 @@ def test_t1_orcamento_estourado_vira_parcial_marcado(
     for i in range(3):
         t1._add_call(webapi, 820 + i, to=f"(551199999111{i})")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     counters, truncated = out["counters"], out["truncated"]
     assert counters["phase"] == progress.PHASE_PARTIAL
@@ -184,7 +185,7 @@ def test_t2_http_calls_igual_ao_trafego_do_fake(
     t2._add_audio(webapi, 831, "b.wav", "E:b>>b.wav", "HB", "fala dois")
     webapi.requests_log.clear()
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     paths = [entry["path"] for entry in webapi.requests_log]
     searches = paths.count("/search")
@@ -205,7 +206,7 @@ def test_t2_orcamento_estourado_vira_parcial_marcado(
     for i in range(4):
         t2._add_audio(webapi, 840 + i, f"a{i}.wav", f"E:o>>a{i}.wav", f"H{i}", f"f{i}")
 
-    out = transcripts.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
+    out = tool.transcripts_generate(SOURCE_ID, dest_dir=str(tmp_path))
 
     counters, truncated = out["counters"], out["truncated"]
     assert counters["phase"] == progress.PHASE_PARTIAL
@@ -235,7 +236,7 @@ def test_t5_docs_omitidos_maiores_que_1_sao_contados_por_valor(
     monkeypatch.setitem(knowledge.TOOL_BUDGETS, "triage_geolocation", 8)
     tg._cluster(webapi, 900, 3, "-22.9", "-43.2")
 
-    out = geolocation.triage_geolocation(SOURCE_ID)
+    out = tool.triage_geolocation(SOURCE_ID)
 
     assert out["truncated"]["http_budget_exceeded"] is True
     assert out["counters"]["http_calls"] == 8
@@ -255,7 +256,7 @@ def test_t4_docs_omitidos_maiores_que_1_sao_contados_por_valor(
     for i in range(3):
         tf._money(webapi, 400 + i, f"c{i}.pdf", [f"R$ {i + 1},00"])
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert out["truncated"]["http_budget_exceeded"] is True
     assert out["counters"]["http_calls"] == 23

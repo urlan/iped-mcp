@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from iped_mcp import progress
-from iped_mcp.triage import identity, knowledge
+from iped_mcp.triage import identity, knowledge, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 CONTACTS_QUERY = 'category:"contacts"'
@@ -92,7 +92,7 @@ def test_device_info_android_padronizado_16_chaves(
         category="account",
     )
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     device = out["identity"]["device_info"]
     assert set(device) == set(knowledge.DEVICE_INFO_SCHEMA)
@@ -124,7 +124,7 @@ def test_reconhecido_por_contenttype_nao_alimenta_identidade(
         category="recognized devices",
     )
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert "identity" not in out and "message" not in out
     assert out["recognized_devices_count"] == 1
@@ -145,7 +145,7 @@ def test_teto_de_reconhecidos_com_contador_honesto(
     for i in range(55):
         _add_recognized(webapi, 500 + i, f"Modelo {i}")
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert out["recognized_devices_count"] == 55
     assert len(out["recognized_devices"]) == knowledge.RECOGNIZED_DEVICES_MAX
@@ -172,7 +172,7 @@ def test_regex_phone_filtros_e_int_max(webapi: Any, fake_router: Any) -> None:
         category="messages",
     )
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert out["identity"]["mentioned_phone_numbers"] == [
         "551199999011", "+55 11 99999-0021",
@@ -197,7 +197,7 @@ def test_confianca_alta_score_90_e_justificacao_literal(
         category="user accounts",
     )
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     ident = out["identity"]
     assert ident["name"] == "Fulano da Silva"  # "(...)" limpo (:455)
@@ -221,7 +221,7 @@ def test_fonte_nao_alta_confianca_media_score_70(
         category="account",
     )
 
-    ident = identity.triage_identity(SOURCE_ID)["identity"]
+    ident = tool.triage_identity(SOURCE_ID)["identity"]
 
     assert (ident["confidence"], ident["score"], ident["relevance"]) == (
         "MÉDIA", 70, "MÉDIA",
@@ -245,14 +245,14 @@ def test_score_50_for_confianca_baixa_unidade() -> None:
 def test_source_inexistente_vira_value_error_estavel(fake_router: Any) -> None:
     """404 de source: ValueError estável ANTES de qualquer HTTP (M-2)."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        identity.triage_identity(UNKNOWN_SOURCE)
+        tool.triage_identity(UNKNOWN_SOURCE)
 
 
 def test_eixo_vazio_e_mensagem_explicita_sem_excecao(
     webapi: Any, fake_router: Any
 ) -> None:
     """Nada no eixo: message explícita, sem identity, sem exceção (§0.1)."""
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS | {"message"}
     assert out["message"] == knowledge.IDENTITY_EMPTY_MESSAGE
@@ -277,7 +277,7 @@ def test_query_500_vira_hits_menos_um_e_eixo_segue(
     )
     webapi.category_hits[CONTACTS_QUERY.split('"')[1]] = [703]
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert out["query_hits"][CONTACTS_QUERY] == -1
     assert any(CONTACTS_QUERY in w for w in out["warnings"])
@@ -296,7 +296,7 @@ def test_amostra_da_agenda_limitada_e_marcada(webapi: Any, fake_router: Any) -> 
             category="contatos",
         )
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert out["identity"]["known_contacts_count"] == 25
     assert len(out["identity"]["known_contacts_sample"]) == knowledge.KNOWN_CONTACTS_SAMPLE
@@ -311,7 +311,7 @@ def test_pre_sonda_histograma_com_userName(webapi: Any, fake_router: Any) -> Non
     """userName coberto no build: histograma no envelope + nome via fallback."""
     _add_doc(webapi, 780, "wa.json", {"userName": ["Nick do Zap"]}, category="user accounts")
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert out["counters"]["name_field_hits"]["userName"] == 1
     assert out["identity"]["name"] == "Nick do Zap"
@@ -323,7 +323,7 @@ def test_pre_sonda_cobertura_zero_avisa_com_literais(
     """Docs varridos sem NENHUMA variante: aviso nomeia os testados (§3.2)."""
     _add_doc(webapi, 781, "dev.json", {"ufed:Source": ["native"]}, category="device info")
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     assert sum(out["counters"]["name_field_hits"].values()) == 0
     coverage = [w for w in out["warnings"] if "sem cobertura" in w]
@@ -347,7 +347,7 @@ def test_orcamento_estourado_vira_parcial_marcado(
             category="contacts",
         )
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     counters, truncated = out["counters"], out["truncated"]
     assert (counters["phase"], counters["http_calls"]) == (
@@ -370,7 +370,7 @@ def test_http_calls_exato_e_igual_ao_trafego_do_fake(
     _add_recognized(webapi, 821, "Pixel 7")
     webapi.requests_log.clear()
 
-    out = identity.triage_identity(SOURCE_ID)
+    out = tool.triage_identity(SOURCE_ID)
 
     paths = _http_paths(webapi)
     searches = paths.count("/search")

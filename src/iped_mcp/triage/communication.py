@@ -40,8 +40,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from iped_mcp.fetch import search_ids
 from iped_mcp.progress import PHASE_PARTIAL, op_envelope
@@ -645,49 +643,3 @@ def build_triage_communication(
     return _payload(
         sid, started, chats, searches, term_docs, terms, scan, budget, omitted
     )
-
-
-def triage_communication(
-    source_id: str, search_terms: tuple[str, ...] = ()
-) -> dict[str, Any]:
-    """Triagem de comunicação do ICARO (T-8): chats agregados + buscas.
-
-    Args:
-        source_id: id do source no servidor WebAPI do caso.
-        search_terms: termos investigativos opcionais (padrão vazio); com
-            termos vale ``min(50+total, 95)``/ALTA, sem termos
-            ``min(40+total//2, 70)``/MÉDIA apenas com ``total > 50``.
-
-    Returns:
-        Envelope ``{source_id, chats[:30] (interlocutor, is_group,
-        message_count, chat_total_messages, terms_hits, score, relevance;
-        grupos sempre mantidos, indivíduos no top-20), searches[:50] (query,
-        timestamp, source_app, score 40, BAIXA), chats_individuals_total,
-        chats_grupos_total[, top_terms] (só com search_terms), query_hits,
-        counters (+http_calls), truncated, warnings[, message]}`` — o corpo
-        das mensagens NUNCA é publicado; agregação "agregada-v1" (sem mescla
-        por chat-id, D-9, declarado em warning).
-
-    Raises:
-        ToolError: source inexistente/servidor offline (M-2) ou erro
-            inesperado traduzido; estouro de orçamento NUNCA raising — vira
-            ``truncated.http_budget_exceeded`` + warning.
-    """
-    try:
-        return build_triage_communication(source_id, search_terms)
-    except ValueError:
-        raise
-    except Exception as exc:  # traduz erro inesperado (padrão da família)
-        raise ToolError(f"triage_communication falhou: {exc}") from exc
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de triagem de comunicação no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_communication)

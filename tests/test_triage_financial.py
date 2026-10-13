@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from iped_mcp import progress
-from iped_mcp.triage import financial, knowledge
+from iped_mcp.triage import financial, knowledge, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 UUID_A = "12345678-1234-1234-1234-123456789abc"
@@ -116,7 +116,7 @@ def test_escada_method_e_amount_do_ladder(webapi: Any, fake_router: Any) -> None
              {"Regex:BR_BANK_ACCOUNT": ["Ag 1234\nConta 5"]},
              category="documentos")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     by_doc = {e["doc_id"]: e for e in out["evidences"]}
     assert (by_doc[10]["method"], by_doc[10]["amount"]) == (
@@ -139,7 +139,7 @@ def test_scores_do_handler_de_evidencia(webapi: Any, fake_router: Any) -> None:
     _add_doc(webapi, 13, "extrato.txt", {"Regex:BR_BANK_ACCOUNT": ["Ag 1"]},
              category="documentos")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     scores = {e["doc_id"]: e["score"] for e in out["evidences"]}
     assert scores == {10: 75, 12: 75, 13: 55}
@@ -156,7 +156,7 @@ def test_dedup_por_assinatura_e_beneficiary_colapsado(
              {"Regex:BR_BANK_ACCOUNT": ["Ag 1234\nConta 5"]},
              category="documentos")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert len(out["evidences"]) == 2  # doc 11 engolido pela assinatura
     assert [e["doc_id"] for e in out["evidences"]] == [10, 13]
@@ -169,7 +169,7 @@ def test_evidencias_ordenadas_por_valor_desc(webapi: Any, fake_router: Any) -> N
     _money(webapi, 21, "b.pdf", ["R$ 1.234,56"])
     _add_doc(webapi, 22, "c.pdf", {"Regex:BR_BOLETO": ["x"]}, category="documentos")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert [e["doc_id"] for e in out["evidences"]] == [21, 20, 22]
 
@@ -181,7 +181,7 @@ def test_transferencia_acentuada_precisa_de_regex_e_sem_acento_nao(webapi: Any, 
     _money(webapi, 31, "transferência_comprovada.pdf", ["R$ 9,00"], category="pdf")
     _add_doc(webapi, 32, "transferencia.pdf", {}, category="pdf")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert {e["doc_id"] for e in out["evidences"]} == {31}
     # doc 32 passou no gate (termo) mas não tem regex: entra como documento
@@ -197,7 +197,7 @@ def test_midia_sem_termo_descartada_mesmo_com_regex(
     _money(webapi, 40, "IMG_0042.jpg", ["R$ 100,00"], category="images")
     _money(webapi, 41, "comprovante_0042.jpg", ["R$ 100,00"], category="images")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert [e["doc_id"] for e in out["evidences"]] == [41]
 
@@ -210,7 +210,7 @@ def test_sonda_sem_detectores_vira_warning_nominal(
 ) -> None:
     """Detector com 0 hits no caso: painel 0 + warning nomeando o detector;
     eixo segue sem exceção (a lista é o consumo do ICARO, não o catálogo)."""
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert out["regex_availability"] == {
         "MONEY": 0, "BR_BOLETO": 0, "BR_BANK_ACCOUNT": 0, "CREDIT_CARD": 0,
@@ -227,7 +227,7 @@ def test_sonda_500_nao_derruba_o_eixo(webapi: Any, fake_router: Any) -> None:
     webapi.fail_search_queries.add(PROBE_FAIL_MONEY)
     _money(webapi, 42, "comprovante.pdf", ["R$ 10,00"])
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert out["regex_availability"]["MONEY"] == -1
     assert any("sonda Regex:MONEY falhou" in w for w in out["warnings"])
@@ -273,7 +273,7 @@ def test_cartao_score_86_e_fluxo_de_jumps(webapi: Any, fake_router: Any) -> None
     """13 transações: score min(60+26,95)=86 → ALTA (>=85); total somado."""
     _add_card_flow(webapi, 13)
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert len(out["cards"]) == 1
     card = out["cards"][0]
@@ -289,7 +289,7 @@ def test_cartao_amostra_de_transacoes_marcada(webapi: Any, fake_router: Any) -> 
     """13 transações: amostra das 5 últimas no envelope, omissão marcada (§4.6)."""
     _add_card_flow(webapi, 13)
 
-    card = financial.triage_financial(SOURCE_ID)["cards"][0]
+    card = tool.triage_financial(SOURCE_ID)["cards"][0]
 
     assert len(card["transactions"]) == knowledge.CARD_TRANSACTIONS_SAMPLE
     assert card["transactions"][-1]["date"] == "2024-05-12"  # última descoberta
@@ -323,7 +323,7 @@ def test_cartao_wallet_fallback_literal(webapi: Any, fake_router: Any) -> None:
     _add_doc(webapi, 95, "Mobile Card Wallet Card - Google.csv",
              {"ufed:Description": ["Google Wallet"]}, category="mobile cards")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert out["cards"][0]["source_wallet"] == "Carteira digital"
     assert out["cards"][0]["card_type"] == "Mobile Card"
@@ -363,7 +363,7 @@ def test_conta_com_ativos_e_conta_de_nuvem(webapi: Any, fake_router: Any) -> Non
              path="e-mails/pessoa_teste_9@gmail.example.invalid.ufdr",
              probe_category="financial account")
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     by_id = {a["ufed_id"]: a for a in out["accounts"]}
     conta = by_id[UUID_A]
@@ -401,7 +401,7 @@ def test_pix_no_method_vira_alta_senao_media() -> None:
 def test_source_inexistente_vira_value_error_estavel(fake_router: Any) -> None:
     """404 de source: ValueError estável ANTES de qualquer HTTP (M-2)."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        financial.triage_financial(UNKNOWN_SOURCE)
+        tool.triage_financial(UNKNOWN_SOURCE)
 
 
 def test_query_de_categoria_500_vira_hit_menos_um_e_eixo_segue(
@@ -411,7 +411,7 @@ def test_query_de_categoria_500_vira_hit_menos_um_e_eixo_segue(
     webapi.fail_search_queries.add('category:"documentos"')
     _money(webapi, 50, "comp.pdf", ["R$ 1,00"])
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert out["query_hits"]['category:"documentos"'] == -1
     assert any('category:"documentos"' in w for w in out["warnings"])
@@ -421,7 +421,7 @@ def test_eixo_vazio_e_mensagem_explicita_sem_excecao(
     webapi: Any, fake_router: Any
 ) -> None:
     """Nada no eixo: message explícita, sem exceção (§0.1)."""
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS | {"message"}
     assert out["message"] == knowledge.FINANCIAL_EMPTY_MESSAGE
@@ -440,7 +440,7 @@ def test_teto_de_evidencias_marcado_com_omissao(
     for i in range(knowledge.FINANCIAL_LIST_TOP + 5):
         _money(webapi, 300 + i, f"comp_{i}.pdf", [f"R$ {i + 1},00"])
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     assert len(out["evidences"]) == knowledge.FINANCIAL_LIST_TOP
     assert out["evidence_count"] == 35
@@ -460,7 +460,7 @@ def test_orcamento_estourado_vira_parcial_marcado(
     _money(webapi, 400, "a.pdf", ["R$ 5,00"])
     _money(webapi, 401, "b.pdf", ["R$ 6,00"])
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     counters, truncated = out["counters"], out["truncated"]
     assert (counters["phase"], counters["http_calls"]) == (
@@ -480,7 +480,7 @@ def test_http_calls_exato_e_igual_ao_trafego_do_fake(
     _add_card_flow(webapi, 1)
     webapi.requests_log.clear()
 
-    out = financial.triage_financial(SOURCE_ID)
+    out = tool.triage_financial(SOURCE_ID)
 
     paths = _http_paths(webapi)
     searches = paths.count("/search")

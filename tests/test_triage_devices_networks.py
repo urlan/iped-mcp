@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from iped_mcp import progress
-from iped_mcp.triage import devices_networks, knowledge
+from iped_mcp.triage import devices_networks, knowledge, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 ENVELOPE_KEYS = {
@@ -79,7 +79,7 @@ def test_fluxo_feliz_agregados_e_sem_timeline_bruta(
                  app="23F77; iPhone15,2")
     _add_log_doc(webapi, 501, "Service=FMIP IP=200.10.0.1", ts=TS_MORNING)
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS
     assert "connections" not in out  # pin NEGATIVO §7.8: nunca a timeline
@@ -128,7 +128,7 @@ def test_ipv6_colapsa_no_prefixo_64(webapi: Any, fake_router: Any) -> None:
     _add_log_doc(webapi, 510, "Service=FMIP IP=2804:14d:5000:c2aa::1")
     _add_log_doc(webapi, 511, "Service=FMF IP=2804:14d:5000:c2aa:1234::5")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert len(out["connections_by_ip"]) == 1
     slot = out["connections_by_ip"][0]
@@ -141,7 +141,7 @@ def test_ip_invalido_descartado_contado(webapi: Any, fake_router: Any) -> None:
     """IP inválido: log contado mas não parseado (:166-168); eixo vazio → message."""
     _add_log_doc(webapi, 512, "Service=FMIP IP=999.1.1.1")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert (out["logs_total"], out["logs_parsed"]) == (1, 0)
     assert out["connections_by_ip"] == []
@@ -152,7 +152,7 @@ def test_corpo_fora_do_padrao_ignorado(webapi: Any, fake_router: Any) -> None:
     """Body sem ``Service=… IP=…`` não vira conexão (parse_log_entry None)."""
     _add_log_doc(webapi, 513, "backup iniciado sem campos de serviço")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert (out["logs_total"], out["logs_parsed"]) == (1, 0)
 
@@ -167,7 +167,7 @@ def test_fingerprint_dedup_acumula_apps(webapi: Any, fake_router: Any) -> None:
     _add_log_doc(webapi, 521, "Service=FMF IP=10.0.0.2",
                  app="<D73AP> <iPhone OS;26.6;23G71> <cloudd/720.1>")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert len(out["device_fingerprints"]) == 1
     fp = out["device_fingerprints"][0]
@@ -183,7 +183,7 @@ def test_services_summary_hits_desc_e_fallback_cru(webapi: Any, fake_router: Any
     _add_log_doc(webapi, 531, "Service=CLOUDPHOTOLIBRARY IP=10.0.0.2")
     _add_log_doc(webapi, 532, "Service=XYZSRV IP=10.0.0.3")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert [(s["service"], s["label"], s["hits"]) for s in out["services_summary"]] == [
         ("CLOUDPHOTOLIBRARY", "Fotos do iCloud", 2),
@@ -205,7 +205,7 @@ def test_wifi_dedup_preserva_ordem_e_source_marker(
     _add_prop_doc(webapi, 560, "wireless networks",
                   {"ufed:SSID": ["WiFi-Source"], "ufed:Source": ["Native WiFi"]})
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert out["wifi_networks"] == ["WiFi-Z", "WiFi-A", "WiFi-B", "WiFi-Source"]
 
@@ -216,7 +216,7 @@ def test_bluetooth_dedup_exato(webapi: Any, fake_router: Any) -> None:
         _add_prop_doc(webapi, 570 + offset, "bluetooth devices",
                       {"ufed:DeviceName": [name]})
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert out["bluetooth_devices"] == ["Headphone X", "Car Kit"]
 
@@ -230,7 +230,7 @@ def test_teto_wifi_100_marcado(webapi: Any, fake_router: Any) -> None:
         _add_prop_doc(webapi, 600 + i, "wireless networks",
                       {"ufed:SSId": [f"NET-{i:03d}"]})
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert len(out["wifi_networks"]) == knowledge.DN_WIFI_NETWORKS_MAX
     assert out["truncated"]["wifi_truncated"] is True
@@ -243,7 +243,7 @@ def test_teto_by_ip_50_por_hits(webapi: Any, fake_router: Any) -> None:
         _add_log_doc(webapi, 700 + i, f"Service=FMIP IP=10.0.0.{i}")
     _add_log_doc(webapi, 800, "Service=FMF IP=10.0.0.0")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert len(out["connections_by_ip"]) == knowledge.DN_CONNECTIONS_BY_IP_MAX
     assert out["connections_by_ip"][0]["ip"] == "10.0.0.0"
@@ -261,7 +261,7 @@ def test_query_500_vira_hit_negativo_e_warning(webapi: Any, fake_router: Any) ->
     webapi.fail_search_queries.add('category:"logs"')
     _add_prop_doc(webapi, 850, "wireless networks", {"ufed:SSId": ["NET-X"]})
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert out["query_hits"]['category:"logs"'] == -1
     assert any('category:"logs"' in w and "falhou" in w for w in out["warnings"])
@@ -271,12 +271,12 @@ def test_query_500_vira_hit_negativo_e_warning(webapi: Any, fake_router: Any) ->
 def test_source_inexistente_vira_value_error_estavel(fake_router: Any) -> None:
     """404 de source: ValueError estável ANTES de qualquer HTTP (M-2)."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        devices_networks.triage_devices_networks(UNKNOWN_SOURCE)
+        tool.triage_devices_networks(UNKNOWN_SOURCE)
 
 
 def test_eixo_vazio_e_mensagem_explicita(webapi: Any, fake_router: Any) -> None:
     """Nada aproveitável: message (None do ICARO → §0.1) + as 4 queries pagas."""
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS | {"message"}
     assert out["message"] == knowledge.DN_EMPTY_MESSAGE
@@ -291,7 +291,7 @@ def test_orcamento_estourado_vira_parcial_marcado(
     for i in range(3):
         _add_log_doc(webapi, 880 + i, f"Service=FMIP IP=10.9.{i}.1")
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     counters, truncated = out["counters"], out["truncated"]
     assert (counters["phase"], counters["http_calls"]) == (
@@ -311,7 +311,7 @@ def test_http_calls_exato_e_igual_ao_trafego_do_fake(
         _add_log_doc(webapi, 890 + i, f"Service=FMIP IP=10.7.{i}.1")
     webapi.requests_log.clear()
 
-    out = devices_networks.triage_devices_networks(SOURCE_ID)
+    out = tool.triage_devices_networks(SOURCE_ID)
 
     paths = [entry["path"] for entry in webapi.requests_log]
     searches = paths.count("/search")

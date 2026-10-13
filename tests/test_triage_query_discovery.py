@@ -23,7 +23,7 @@ import pytest
 
 from iped_mcp import progress
 from iped_mcp.regex.queries import KNOWN_TYPES
-from iped_mcp.triage import discovery, knowledge
+from iped_mcp.triage import discovery, knowledge, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 SECRET_VALUE = "FRASE-SECRETA-QUE-NAO-PODE-SAIR"
@@ -161,7 +161,7 @@ def test_descoberta_com_campos_histograma_e_contagem_exata(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {"whatsapp": [10, 11]}, calls)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS
     assert out["probes"]["whatsapp"] == {"total_hits": 2, "available": True}
@@ -182,7 +182,7 @@ def test_value_type_scalar_e_mixed(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {"gps": [10, 11]}, calls)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert out["fields"]["campo_x"]["value_type"] == "mixed"
     assert out["fields"]["campo_x"]["docs_na_amostra"] == 2
@@ -198,7 +198,7 @@ def test_sonda_e_known_types_pino_estrutural(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {}, calls)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert set(out["regex_availability"]) == set(KNOWN_TYPES)
     assert len(KNOWN_TYPES) == 9
@@ -215,7 +215,7 @@ def test_source_sem_detectores_regex_avisa(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {}, calls, regex_docs=False)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert set(out["regex_availability"].values()) == {0}
     assert knowledge.DISCOVERY_NO_REGEX_DETECTOR_WARNING in out["warnings"]
@@ -232,9 +232,9 @@ def test_cache_segunda_chamada_zero_gets(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {"whatsapp": [10]}, calls)
 
-    first = discovery.triage_query_discovery(SOURCE_ID)
+    first = tool.triage_query_discovery(SOURCE_ID)
     calls_after_first = list(calls)
-    second = discovery.triage_query_discovery(SOURCE_ID)
+    second = tool.triage_query_discovery(SOURCE_ID)
 
     assert first["cache"]["served_from_cache"] is False
     assert calls == calls_after_first  # PIN: nenhuma query nova
@@ -249,14 +249,14 @@ def test_cache_ttl_expirado_re_sonda(
     """Entrada mais velha que o TTL → build fresco (GETs > 0, served false)."""
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {}, calls)
-    discovery.triage_query_discovery(SOURCE_ID)
+    tool.triage_query_discovery(SOURCE_ID)
 
     entry = discovery._CACHE[SOURCE_ID]
     discovery._CACHE[SOURCE_ID] = discovery._CacheEntry(
         built_at=entry.built_at - knowledge.DISCOVERY_CACHE_TTL - 1.0,
         payload=entry.payload,
     )
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert out["cache"]["served_from_cache"] is False
     assert out["counters"]["http_calls"] > 0
@@ -268,7 +268,7 @@ def test_cache_nao_vaza_entre_sources(
     """Cache é POR SOURCE: outro source não serve o catálogo alheio."""
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {}, calls)
-    discovery.triage_query_discovery(SOURCE_ID)
+    tool.triage_query_discovery(SOURCE_ID)
 
     entry = discovery._CACHE[SOURCE_ID]
     # Outro source legítimo (o fake só conhece SOURCE_ID) exige resolve real;
@@ -289,7 +289,7 @@ def test_probe_500_nao_aborta(
         monkeypatch, webapi, {"msgstore": [10]}, calls, fail_terms=("whatsapp",)
     )
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     failed = out["probes"]["whatsapp"]
     assert failed["available"] is False
@@ -306,7 +306,7 @@ def test_probe_500_contra_fake_real(
     """500 real do fake (fail_search_queries): mesmo contrato sem script."""
     webapi.fail_search_queries.add("whatsapp")
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert out["probes"]["whatsapp"]["available"] is False
     assert out["probes"]["whatsapp"]["error"]
@@ -338,7 +338,7 @@ def test_teto_de_amostra_5_docs_por_probe(
 
     monkeypatch.setattr(discovery, "get_document_props", counting)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert props_calls == list(range(20, 25))
     assert out["fields"]["name"]["docs_na_amostra"] == 5
@@ -354,7 +354,7 @@ def test_teto_probes_que_o_veem_trs(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, hits, calls)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     seen = out["fields"]["name"]["probes_que_o_veem"]
     assert len(seen) == knowledge.DISCOVERY_FIELD_PROBES_MAX
@@ -373,7 +373,7 @@ def test_pin_privacidade_valores_fora_do_envelope(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {"whatsapp": [10]}, calls)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert SECRET_VALUE not in json.dumps(out, ensure_ascii=False)
     assert "arquivo_10.png" not in json.dumps(out, ensure_ascii=False)
@@ -396,7 +396,7 @@ def test_source_inexistente_404_sem_http(
     _script_search(monkeypatch, webapi, {}, calls)
 
     with pytest.raises(ValueError, match=UNKNOWN_SOURCE):
-        discovery.triage_query_discovery(UNKNOWN_SOURCE)
+        tool.triage_query_discovery(UNKNOWN_SOURCE)
 
     assert calls == []  # PIN: M-2 antes de HTTP
 
@@ -404,7 +404,7 @@ def test_source_inexistente_404_sem_http(
 def test_sid_vazio_rejeitado() -> None:
     """source_id vazio/None → ValueError estável (família triage)."""
     with pytest.raises(ValueError, match="obrigat"):
-        discovery.triage_query_discovery("  ")
+        tool.triage_query_discovery("  ")
 
 
 def test_catalogo_vazio_com_mensagem(
@@ -414,7 +414,7 @@ def test_catalogo_vazio_com_mensagem(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {}, calls, regex_docs=False)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert out["message"] == knowledge.DISCOVERY_EMPTY_MESSAGE
     assert out["fields"] == {}
@@ -436,7 +436,7 @@ def test_orcamento_estourado_truncado_e_nao_cacheado(
     calls: list[str] = []
     _script_search(monkeypatch, webapi, {"whatsapp": [10]}, calls)
 
-    out = discovery.triage_query_discovery(SOURCE_ID)
+    out = tool.triage_query_discovery(SOURCE_ID)
 
     assert out["truncated"]["http_budget_exceeded"] is True
     assert out["counters"]["http_calls"] == 2

@@ -27,7 +27,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastmcp import FastMCP
 
 from iped_mcp import progress
 from iped_mcp.fetch import get_document_props, search_ids
@@ -482,58 +481,3 @@ def build_triage_query_discovery(source_id: str) -> dict[str, Any]:
     }
     return _envelope(sid, started, build.payload, cache_info, budget,
                      build.docs_sampled)
-
-
-def triage_query_discovery(source_id: str) -> dict[str, Any]:
-    """Descobre o QUE EXISTE num source: catálogo por evidência, com cache.
-
-    Roda 33 probes de frase LUCENE (lista canônica do ICARO em
-    ``knowledge.DISCOVERY_PROBES`` — frases soltas, nunca regex do usuário),
-    amostra até ``DISCOVERY_SAMPLE_SIZE`` docs de cada probe com hits e
-    devolve o histograma de NOMES de campos com cobertura (docs que o têm e
-    até 3 probes que o veem, ``value_type`` str/list/mixed), buckets de
-    mime/extensão da amostra e a disponibilidade dos 9 detectores
-    ``Regex:<N>`` canônicos do servidor (sonda = KNOWN_TYPES; o
-    RegexConfig.txt completo é externo ao MCP — warning nominal documenta).
-    Pin de privacidade: nenhum VALOR de conteúdo atravessa — só nomes e
-    contagens. Falha de probe (500/timeout) marca ``available: false`` +
-    ``error`` e segue (fiel ao ICARO :338-353, nunca aborta).
-
-    O catálogo fica em cache por source (TTL ``DISCOVERY_CACHE_TTL``): a
-    2ª chamada na janela serve ``cache.served_from_cache=true`` com
-    ``counters.http_calls=0`` e warning ``catalogo_servido_de_cache``
-    (R-TRIAGE-1: cache não conta GET). Builds truncados por orçamento
-    nunca são cacheados. Probes de frase são queries de conteúdo caras —
-    elapsed > ``DISCOVERY_SLOW_WARNING_S`` emite warning sugerindo o reuso
-    do cache (o agente decide re-chamar só pelo bloco ``fields``).
-
-    Args:
-        source_id: source a descobrir (veja iped_list_sources).
-
-    Returns:
-        {source_id, probes {termo: {total_hits, available, error?}}, fields
-        {campo: {docs_na_amostra, probes_que_o_veem[:3], value_type}},
-        regex_availability {N: hits} (-1 = query que falhou), mime_types
-        {mime: contagem}, extensions {ext: contagem}, sample_size,
-        cache {served_from_cache, ttl_s, age_s?}, counters (op_envelope +
-        probes_ran/docs_sampled/http_calls/cached), truncated
-        (http_budget_exceeded), warnings}; ``message`` quando o catálogo
-        está vazio (nunca exceção).
-
-    Raises:
-        ValueError: source_id vazio, inexistente ou servidor indisponível
-            (textos estáveis da política M-2).
-    """
-    return build_triage_query_discovery(source_id)
-
-
-def register(mcp: FastMCP) -> None:
-    """Registra a tool de query discovery (T-10) no servidor.
-
-    Args:
-        mcp: servidor FastMCP ativo.
-
-    Returns:
-        Nada.
-    """
-    mcp.add_tool(triage_query_discovery)

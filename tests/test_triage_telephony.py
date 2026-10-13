@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from iped_mcp import progress
-from iped_mcp.triage import knowledge, telephony
+from iped_mcp.triage import knowledge, telephony, tool
 from tests.conftest import SOURCE_ID, UNKNOWN_SOURCE, make_doc
 
 CONTACT_ROW_KEYS = {
@@ -125,7 +125,7 @@ def test_fluxo_feliz_agregacao_formatacao_e_ordem(
     _add_call(webapi, 103, to="Maria (+5511999990013)", direction="incoming", duration="60")
     _add_agenda_contact(webapi, 201, "Jose da Silva", "(55 11) 99999-8888")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert set(out) == ENVELOPE_KEYS
     assert "message" not in out
@@ -196,7 +196,7 @@ def test_limiares_de_relevancia_e_teto_de_score(
         _add_call_group(webapi, next_id, phone, count)
         next_id += count
 
-    contacts = telephony.triage_telephony(SOURCE_ID)["contacts"]
+    contacts = tool.triage_telephony(SOURCE_ID)["contacts"]
 
     by_phone = {c["phone"]: c for c in contacts}
     assert [(c["phone"], c["relevance"], c["score"]) for c in contacts] == [
@@ -217,7 +217,7 @@ def test_teto_top20_marca_truncamento(webapi: Any, fake_router: Any) -> None:
     for i in range(25):
         _add_call(webapi, 300 + i, to=f"(5577{i:08d})")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert len(out["contacts"]) == knowledge.TOP_CONTACTS == 20
     assert out["truncated"]["contacts_truncated"] is True
@@ -236,7 +236,7 @@ def test_cap_total_de_candidatos_aplicado_e_marcado(
     for i in range(8):
         _add_call(webapi, 400 + i, to=f"(5566{i:08d})")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["truncated"]["total_cap_applied"] is True
     assert out["counters"]["docs_searched"] == 3
@@ -250,7 +250,7 @@ def test_cap_por_query_nomeia_a_query_exata(
     for i in range(5):
         _add_call(webapi, 500 + i, to=f"(5555{i:08d})")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["truncated"]["query_caps_applied"] == [CALLS_QUERY]
     assert out["query_hits"][CALLS_QUERY] == 5  # hits brutos, antes do cap
@@ -265,7 +265,7 @@ def test_source_inexistente_vira_value_error_estavel(
 ) -> None:
     """ValueError com o texto estável do Router.resolve, antes do HTTP."""
     with pytest.raises(ValueError, match="não encontrado em nenhum endpoint"):
-        telephony.triage_telephony(UNKNOWN_SOURCE)
+        tool.triage_telephony(UNKNOWN_SOURCE)
 
 
 # --- T1-6: caso sem telefonia = triagem vazia explícita -----------------------
@@ -275,7 +275,7 @@ def test_caso_sem_telefonia_e_vazio_explicito(
     webapi: Any, fake_router: Any
 ) -> None:
     """Nenhum hit nas 5 categorias: contacts=[], contadores 0, message."""
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["contacts"] == []
     assert out["message"] == knowledge.TELEPHONY_EMPTY_MESSAGE
@@ -296,7 +296,7 @@ def test_query_que_falha_vira_warning_e_eixo_segue(
     _add_call(webapi, 601, to="(5511999990018)")
     _add_agenda_contact(webapi, 602, "Ana", "551199999012")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["query_hits"][CALLS_QUERY] == -1
     assert any(CALLS_QUERY in w for w in out["warnings"])
@@ -317,7 +317,7 @@ def test_chamada_sem_numero_util_e_ignorada(
     webapi.docs[(SOURCE_ID, 702)]["properties"]["ufed:PhoneNumber"] = ["12"]
     del webapi.docs[(SOURCE_ID, 702)]["properties"]["Communication:To"]
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["contacts"] == []
     assert out["message"] == knowledge.TELEPHONY_EMPTY_MESSAGE
@@ -368,7 +368,7 @@ def test_t11_cada_variante_da_whitelist_produz_nome(
     """(a) Cada um dos 4 campos, isolado, extrai o nome do contato."""
     _add_named_contact(webapi, 231, name_field, "Ana Pe")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     contact = out["contacts"][0]
     assert contact["contact_name"] == "ANA PE"
@@ -381,7 +381,7 @@ def test_t11_ordem_ufed_name_vence_userName(webapi: Any, fake_router: Any) -> No
     _add_named_contact(webapi, 232, "ufed:Name", "Vencedor")
     webapi.docs[(SOURCE_ID, 232)]["properties"]["userName"] = ["Perdedor"]
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["contacts"][0]["contact_name"] == "VENCEDOR"
     hits = out["counters"]["contact_name_field_hits"]
@@ -397,7 +397,7 @@ def test_t11_sem_campo_de_nome_interlocutor_desconhecido(
     _add_named_contact(webapi, 233, None, "", phone="5511999990012")
     _add_call(webapi, 234, to="(5511999990012)")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     rows = {row["phone"]: row for row in out["contacts"]}
     assert rows["5511999990012"]["contact_name"] == "DESCONHECIDO"
@@ -413,7 +413,7 @@ def test_t11_histograma_e_aviso_de_origem(webapi: Any, fake_router: Any) -> None
     _add_named_contact(webapi, 241, "userName", "Casa", phone="5511999990004")
     _add_named_contact(webapi, 242, "userName", "Trabalho", phone="5511999990006")
 
-    out = telephony.triage_telephony(SOURCE_ID)
+    out = tool.triage_telephony(SOURCE_ID)
 
     assert out["counters"]["contact_name_field_hits"] == {
         "ufed:Name": 0,
@@ -425,7 +425,7 @@ def test_t11_histograma_e_aviso_de_origem(webapi: Any, fake_router: Any) -> None
     # origem clássica NÃO dispara o aviso
     webapi.requests_log.clear()
     _add_named_contact(webapi, 243, "ufed:Name", "Clássico", phone="5511999990007")
-    out2 = telephony.triage_telephony(SOURCE_ID)
+    out2 = tool.triage_telephony(SOURCE_ID)
     assert not any("nome_da_agenda_origem" in w for w in out2["warnings"])
 
 
@@ -437,7 +437,7 @@ def test_t11_contagem_de_requisicoes_inalterada(
     _add_named_contact(webapi, 251, "userName", "Ana", phone="5511999990008")
     _add_call(webapi, 252, to="(5511999990009)")
 
-    telephony.triage_telephony(SOURCE_ID)
+    tool.triage_telephony(SOURCE_ID)
 
     paths = _http_paths(webapi)
     assert paths.count("/search") == len(knowledge.TELEPHONY_CATEGORIES)
