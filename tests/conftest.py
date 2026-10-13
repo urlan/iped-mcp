@@ -33,7 +33,8 @@ import pytest
 
 from iped_mcp.client import IPEDClient
 
-# --- Constantes do ambiente de referencia medido na FASE 2d ---------------
+# --- Constantes sinteticas do fake (original medido na FASE 2d foi
+# --- sanitizado na fase 11 — ver research/reports/phase-11-sanitization.md) ---
 SOURCE_ID = "pessoa_teste_13@example.invalid"
 SOURCE_PATH = "E:\\TESTE\\Nuvem GOOGLE_TESTE"
 SOURCE_ID_2 = "pessoa_teste_4@example.invalid-0000001"
