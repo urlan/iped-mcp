@@ -6,8 +6,9 @@ ids com espaco, '%' e acento produzem a URL final correta; (2) aplicacao
 unica por id — o `raw_target` que chega ao servidor e exatamente UMA
 codificacao do id cru (requests nao re-escapa o `%XX` produzido, entao
 nao ha dupla escapagem no pipeline); (3) no-op byte-a-byte para o alfabeto
-observado na 2d (e-mails com `@`, `.`, `-`, digitos) — os 20 ids reais do
-ambiente de referencia permanecem com a URL integral identica ao baseline.
+observado (e-mails com `@`, `.`, `-`, digitos) — os 20 ids de referencia
+permanecem com a URL integral identica ao baseline (originais da 2d,
+medidos fora do repositorio, foram sanitizados na fase 11).
 """
 
 from __future__ import annotations
@@ -20,9 +21,10 @@ from iped_mcp.client import _quote_path_id
 from tests.conftest import SOURCE_ID, SOURCE_ID_2, make_doc
 from tests.test_webapi_contract import last_entry
 
-# Os 20 ids de source reais medidos na FASE 2d (research/evidence/runtime/
-# 00-sources.json). Nenhum contem '%'; todos devem seguir byte-a-byte
-# identicos na URL crua (no-op do quote para o alfabeto observado).
+# Os 20 ids de source de referencia (amostra da FASE 2d, hoje sanitizada e
+# substituida por equivalentes sinteticos com o mesmo alfabeto/shape).
+# Nenhum contem '%'; todos devem seguir byte-a-byte identicos na URL crua
+# (no-op do quote para o alfabeto observado).
 REAL_SOURCE_IDS = (
     "pessoa_teste_13@example.invalid",
     "pessoa_teste_15@example.invalid",
@@ -52,8 +54,8 @@ _ENCODED_CASES = [
     pytest.param("meu source", "meu%20source", id="espaco"),
     pytest.param("100%case", "100%25case", id="percentual"),
     pytest.param("café-açaí", "caf%C3%A9-a%C3%A7a%C3%AD", id="acentos"),
-    pytest.param(SOURCE_ID, SOURCE_ID, id="email-real"),
-    pytest.param(SOURCE_ID_2, SOURCE_ID_2, id="email-real-hifen"),
+    pytest.param(SOURCE_ID, SOURCE_ID, id="email-sintetico"),
+    pytest.param(SOURCE_ID_2, SOURCE_ID_2, id="email-sintetico-hifen"),
 ]
 
 _DOC_ID = 3
@@ -135,7 +137,7 @@ def test_percent_literal_in_raw_id_survives_single_escape(
 def test_all_20_real_source_ids_are_byte_identical(
     client: Any, webapi: Any
 ) -> None:
-    """Pino de regressao: os 20 ids reais da 2d seguem com URL byte-identica.
+    """Pino de regressao: os 20 ids de referencia seguem com URL byte-identica.
 
     O quote() com safe='@' e no-op para o alfabeto observado (letras,
     digitos, '.', '-', '_', '@') — nenhuma URL enviada hoje ao jar-alvo
